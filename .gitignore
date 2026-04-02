@@ -1,0 +1,13 @@
+# ROS2 build
+**/build/
+**/install/
+**/log/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/.venv/
+
+# IDE
+.vscode/
+.idea/
