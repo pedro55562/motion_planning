@@ -28,24 +28,21 @@ from rclpy.executors import ExternalShutdownException
 
 
 
-def g_error(e, K=1.0):
-    return K * np.sign(e) * np.sqrt(np.abs(e))
-
 def quaternion_to_yaw(q):
     siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
     cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
     return math.atan2(siny_cosp, cosy_cosp)
 
-def curva(t, a=1.5, omega=0.2, phi=np.pi / 4):
+def curva(t, a=1.5, omega=0.15):
     s = omega * t
 
     p = np.array([
-        a * np.sin(2.0 * s + phi),
+        a * np.sin(2.0 * s),
         a * np.sin(3.0 * s)
     ])
 
     pdot = np.array([
-        2.0 * a * omega * np.cos(2.0 * s + phi),
+        2.0 * a * omega * np.cos(2.0 * s),
         3.0 * a * omega * np.cos(3.0 * s)
     ])
 
@@ -86,7 +83,7 @@ class ControllerNode(Node):
 
         # Parâmetros da curva
         self.a = 1
-        self.omega = 0.25
+        self.omega = 0.08
 
         # Publishers para RViz
         self.curve_pub = self.create_publisher(Path, '/curva_parametrica', 10)
@@ -113,7 +110,7 @@ class ControllerNode(Node):
         ts = np.linspace(0.0, T, 500)
 
         for t in ts:
-            p_ref, _ = curva(t, a=self.a, omega=self.omega)
+            p_ref, _ = curva(t, self.a, self.omega)
 
             pose = PoseStamped()
             pose.header.stamp = path.header.stamp
@@ -177,16 +174,18 @@ class ControllerNode(Node):
         ])
         
         
-        pd, pddot = curva(self.t)
+        pd, pddot = curva(self.t, self.a, self.omega)
         p = np.array([ self.x, self.y])
         
         error = pd - p
-        uv = pddot + g_error(error,K=0.3)
+        uv = pddot + 2 * error
                 
         u = Ainv @ uv
     
         v=u[0]
         w=u[1]
+        # v = np.clip(v, - 0.22,  0.22)
+        # w = np.clip(w, -2.84, 2.84)
         # ================================
         # Publicação
         # ================================
