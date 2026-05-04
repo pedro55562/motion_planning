@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'cmd_vel_pub = tb3_controller.cmd_vel_pub:main',
+            'cmd_vel_pub = mp_tangent_bug.cmd_vel_pub:main',
         ],
     },
 )
