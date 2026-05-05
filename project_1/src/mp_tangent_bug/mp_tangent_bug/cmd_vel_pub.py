@@ -199,10 +199,10 @@ class ControllerNode(Node):
         
         self.publish_cmd(v, w)
         self.publish_tracking_point(pd)
-        # self.get_logger().info(
-        #     f"v={v:.2f}, w={w:.2f}",
-        #     throttle_duration_sec=1.0
-        # )
+        self.get_logger().info(
+            f"v={v:.2f}, w={w:.2f}",
+            throttle_duration_sec=1.0
+        )
 
 
 def main(args=None):
