@@ -18,6 +18,7 @@ def quaternion_to_yaw(q):
     return np.arctan2(siny_cosp, cosy_cosp)
 
 # ros2 run mp_potential_field potential_field_node --ros-args -p goal_x:=1.0 -p goal_y:=0.0
+# ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
 
 class PotentialFieldNode(Node):
 

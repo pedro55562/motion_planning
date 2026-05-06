@@ -223,22 +223,22 @@ def main(args=None):
         v = np.array(node.v_log)
         w = np.array(node.w_log)
 
-        plt.figure()
-        plt.plot(t, e)
-        plt.title("Erro")
-        plt.xlabel("Tempo [s]")
-        plt.ylabel("||e||")
-        plt.grid()
+        # plt.figure()
+        # plt.plot(t, e)
+        # plt.title("Erro")
+        # plt.xlabel("Tempo [s]")
+        # plt.ylabel("||e||")
+        # plt.grid()
 
-        plt.figure()
-        plt.plot(t, v, label="v")
-        plt.plot(t, w, label="w")
-        plt.title("Controle")
-        plt.xlabel("Tempo [s]")
-        plt.legend()
-        plt.grid()
+        # plt.figure()
+        # plt.plot(t, v, label="v")
+        # plt.plot(t, w, label="w")
+        # plt.title("Controle")
+        # plt.xlabel("Tempo [s]")
+        # plt.legend()
+        # plt.grid()
 
-        plt.show()
+        # plt.show()
 
 
 
