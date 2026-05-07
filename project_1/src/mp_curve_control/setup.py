@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'mp_tangent_bug'
+package_name = 'mp_curve_control'
 
 setup(
     name=package_name,
@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'cmd_vel_pub = mp_tangent_bug.cmd_vel_pub:main',
+            'cmd_vel_pub = mp_curve_control.cmd_vel_pub:main'
         ],
     },
 )
