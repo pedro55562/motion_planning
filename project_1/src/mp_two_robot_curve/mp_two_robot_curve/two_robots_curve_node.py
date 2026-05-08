@@ -19,7 +19,7 @@ def quaternion_to_yaw(q):
     return math.atan2(siny_cosp, cosy_cosp)
 
 
-def curva(t, a=1.5, omega=0.15):
+def curva(t, a=1.0, omega=0.08):
     s = omega * t
 
     p = np.array([
@@ -40,9 +40,9 @@ class TwoRobotsCurveNode(Node):
     def __init__(self):
         super().__init__('two_robots_curve_node')
 
-        # ================================
+        # =====================================================
         # Publishers de velocidade
-        # ================================
+        # =====================================================
         self.cmd_pub_tb1 = self.create_publisher(
             TwistStamped,
             '/tb1/cmd_vel',
@@ -55,9 +55,14 @@ class TwoRobotsCurveNode(Node):
             10
         )
 
-        # ================================
-        # Subscribers de odometria
-        # ================================
+        # =====================================================
+        # Subscribers de odometria NORMAL
+        #
+        # Importante:
+        # Não é true_odom.
+        # Não é pose do Gazebo.
+        # É a odometria normal de cada robô.
+        # =====================================================
         self.odom_sub_tb1 = self.create_subscription(
             Odometry,
             '/tb1/odom',
@@ -72,59 +77,134 @@ class TwoRobotsCurveNode(Node):
             10
         )
 
-        # ================================
+        # =====================================================
         # Publishers para debug
-        # ================================
-        self.error_pub_tb1 = self.create_publisher(Float64, '/tb1/controle/erro_norma', 10)
-        self.v_pub_tb1 = self.create_publisher(Float64, '/tb1/controle/v', 10)
-        self.w_pub_tb1 = self.create_publisher(Float64, '/tb1/controle/w', 10)
+        # =====================================================
+        self.error_pub_tb1 = self.create_publisher(
+            Float64,
+            '/tb1/controle/erro_norma',
+            10
+        )
 
-        self.error_pub_tb2 = self.create_publisher(Float64, '/tb2/controle/erro_norma', 10)
-        self.v_pub_tb2 = self.create_publisher(Float64, '/tb2/controle/v', 10)
-        self.w_pub_tb2 = self.create_publisher(Float64, '/tb2/controle/w', 10)
+        self.v_pub_tb1 = self.create_publisher(
+            Float64,
+            '/tb1/controle/v',
+            10
+        )
 
-        # ================================
-        # Estados do robô 1
-        # ================================
-        self.x1 = 0.0
-        self.y1 = 0.0
-        self.theta1 = 0.0
-        self.odom1_received = False
+        self.w_pub_tb1 = self.create_publisher(
+            Float64,
+            '/tb1/controle/w',
+            10
+        )
 
-        # ================================
-        # Estados do robô 2
-        # ================================
-        self.x2 = 0.0
-        self.y2 = 0.0
-        self.theta2 = 0.0
-        self.odom2_received = False
+        self.error_pub_tb2 = self.create_publisher(
+            Float64,
+            '/tb2/controle/erro_norma',
+            10
+        )
 
-        # ================================
+        self.v_pub_tb2 = self.create_publisher(
+            Float64,
+            '/tb2/controle/v',
+            10
+        )
+
+        self.w_pub_tb2 = self.create_publisher(
+            Float64,
+            '/tb2/controle/w',
+            10
+        )
+
+        # =====================================================
         # Tempo
-        # ================================
+        # =====================================================
         self.start_time = self.get_clock().now()
         self.t = 0.0
 
-        # ================================
+        # =====================================================
         # Parâmetros da curva
-        # ================================
+        # =====================================================
         self.a = 1.0
         self.omega = 0.08
 
-        # atraso do segundo robô
-        self.delay_tb2 = 2.0
+        # Atraso do segundo robô na mesma curva
+        self.delay_tb2 = 3.0
 
-        # parâmetro do robô diferencial
+        # Parâmetro do robô diferencial
         self.d = 0.03
 
-        # saturação
-        self.max_v = 0.22
-        self.max_w = 2.84
+        # Saturação
+        self.max_v = 0.5
+        self.max_w = 4.5
 
-        # ================================
+        # Ganho de convergência para a curva
+        self.k = 2.0
+
+        # =====================================================
+        # Poses iniciais desejadas no frame global da curva
+        #
+        # Como não vamos escolher yaw inicial, usamos somente x/y.
+        #
+        # tb1 começa em curva(0)
+        # tb2 começa em curva(-delay_tb2)
+        # =====================================================
+        self.spawn_tb1, _ = curva(
+            0.0,
+            self.a,
+            self.omega
+        )
+
+        self.spawn_tb2, _ = curva(
+            -self.delay_tb2,
+            self.a,
+            self.omega
+        )
+
+        # =====================================================
+        # Estados crus da odometria do robô 1
+        # =====================================================
+        self.odom1_origin_pos = None
+
+        self.raw_x1 = 0.0
+        self.raw_y1 = 0.0
+        self.raw_theta1 = 0.0
+
+        # Pose estimada no frame global da curva
+        self.x1 = 0.0
+        self.y1 = 0.0
+        self.theta1 = 0.0
+
+        self.odom1_received = False
+
+        # =====================================================
+        # Estados crus da odometria do robô 2
+        # =====================================================
+        self.odom2_origin_pos = None
+
+        self.raw_x2 = 0.0
+        self.raw_y2 = 0.0
+        self.raw_theta2 = 0.0
+
+        # Pose estimada no frame global da curva
+        self.x2 = 0.0
+        self.y2 = 0.0
+        self.theta2 = 0.0
+
+        self.odom2_received = False
+
+        # =====================================================
         # Publishers para RViz
-        # ================================
-        self.curve_pub = self.create_publisher(Path, '/curva_parametrica', 10)
+        #
+        # Estou mantendo frame_id = 'odom' para facilitar no RViz.
+        # Conceitualmente, este 'odom' está sendo usado como o
+        # frame global da curva, com origem no tb1.
+        # =====================================================
+        self.curve_pub = self.create_publisher(
+            Path,
+            '/curva_parametrica',
+            10
+        )
 
         self.tracking_point_pub_tb1 = self.create_publisher(
             PointStamped,
@@ -138,20 +218,71 @@ class TwoRobotsCurveNode(Node):
             10
         )
 
-        # ================================
+        # =====================================================
         # Timers
-        # ================================
+        # =====================================================
         self.timer = self.create_timer(0.01, self.control_loop)
         self.curve_timer = self.create_timer(1.0, self.publish_curve)
 
         self.get_logger().info('Nó de controle para tb1 e tb2 iniciado.')
 
+        self.get_logger().info(
+            f'Pose recomendada tb1: '
+            f'x={self.spawn_tb1[0]:.4f}, '
+            f'y={self.spawn_tb1[1]:.4f}'
+        )
+
+        self.get_logger().info(
+            f'Pose recomendada tb2: '
+            f'x={self.spawn_tb2[0]:.4f}, '
+            f'y={self.spawn_tb2[1]:.4f}'
+        )
+
+        self.get_logger().info(
+            f'Parâmetros: a={self.a:.2f}, '
+            f'omega={self.omega:.3f}, '
+            f'delay_tb2={self.delay_tb2:.2f}, '
+            f'max_v={self.max_v:.2f}, '
+            f'max_w={self.max_w:.2f}'
+        )
+
     def att_time(self):
         self.t = (self.get_clock().now() - self.start_time).nanoseconds * 1e-9
+
+    def estimar_pose_global(self, raw_pos, raw_theta, odom_origin_pos, spawn_pos):
+        """
+        Converte odometria local para o frame global da curva.
+
+        Não usa ground truth.
+        Não usa pose do Gazebo.
+
+        Usa somente:
+            1. deslocamento medido pela odometria
+            2. posição inicial conhecida do robô na curva
+
+        Fórmula:
+            p_global = p_spawn + (p_odom_atual - p_odom_inicial)
+
+        Como não estamos escolhendo yaw inicial, assumimos que os robôs
+        nascem com yaw padrão do launch, normalmente zero.
+        """
+        delta_odom = raw_pos - odom_origin_pos
+
+        pos_global = spawn_pos + delta_odom
+
+        # Mantemos o yaw vindo da odometria.
+        # Isso funciona bem se os robôs nascem com yaw default zero,
+        # que é o caso mais comum quando o launch não define yaw.
+        theta_global = raw_theta
+
+        return pos_global, theta_global
 
     def publish_curve(self):
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
+
+        # Mantido como 'odom' para aparecer fácil no RViz.
+        # Conceitualmente é o frame global da curva.
         path.header.frame_id = 'odom'
 
         T = 2.0 * np.pi / self.omega
@@ -196,15 +327,73 @@ class TwoRobotsCurveNode(Node):
         self.tracking_point_pub_tb2.publish(point)
 
     def odom_callback_tb1(self, msg):
-        self.x1 = msg.pose.pose.position.x
-        self.y1 = msg.pose.pose.position.y
-        self.theta1 = quaternion_to_yaw(msg.pose.pose.orientation)
+        raw_pos = np.array([
+            msg.pose.pose.position.x,
+            msg.pose.pose.position.y
+        ])
+
+        raw_theta = quaternion_to_yaw(msg.pose.pose.orientation)
+
+        if self.odom1_origin_pos is None:
+            self.odom1_origin_pos = raw_pos.copy()
+
+            self.get_logger().info(
+                f'tb1 origem odom capturada: '
+                f'x={raw_pos[0]:.4f}, '
+                f'y={raw_pos[1]:.4f}, '
+                f'theta={raw_theta:.4f}'
+            )
+
+        pos_global, theta_global = self.estimar_pose_global(
+            raw_pos,
+            raw_theta,
+            self.odom1_origin_pos,
+            self.spawn_tb1
+        )
+
+        self.raw_x1 = float(raw_pos[0])
+        self.raw_y1 = float(raw_pos[1])
+        self.raw_theta1 = float(raw_theta)
+
+        self.x1 = float(pos_global[0])
+        self.y1 = float(pos_global[1])
+        self.theta1 = float(theta_global)
+
         self.odom1_received = True
 
     def odom_callback_tb2(self, msg):
-        self.x2 = msg.pose.pose.position.x
-        self.y2 = msg.pose.pose.position.y
-        self.theta2 = quaternion_to_yaw(msg.pose.pose.orientation)
+        raw_pos = np.array([
+            msg.pose.pose.position.x,
+            msg.pose.pose.position.y
+        ])
+
+        raw_theta = quaternion_to_yaw(msg.pose.pose.orientation)
+
+        if self.odom2_origin_pos is None:
+            self.odom2_origin_pos = raw_pos.copy()
+
+            self.get_logger().info(
+                f'tb2 origem odom capturada: '
+                f'x={raw_pos[0]:.4f}, '
+                f'y={raw_pos[1]:.4f}, '
+                f'theta={raw_theta:.4f}'
+            )
+
+        pos_global, theta_global = self.estimar_pose_global(
+            raw_pos,
+            raw_theta,
+            self.odom2_origin_pos,
+            self.spawn_tb2
+        )
+
+        self.raw_x2 = float(raw_pos[0])
+        self.raw_y2 = float(raw_pos[1])
+        self.raw_theta2 = float(raw_theta)
+
+        self.x2 = float(pos_global[0])
+        self.y2 = float(pos_global[1])
+        self.theta2 = float(theta_global)
+
         self.odom2_received = True
 
     def publish_cmd_tb1(self, v, w):
@@ -234,6 +423,29 @@ class TwoRobotsCurveNode(Node):
         self.publish_cmd_tb2(0.0, 0.0)
         self.get_logger().info('Robôs parados.')
 
+    def calcular_controle(self, x, y, theta, t_ref):
+        Ainv = (1.0 / self.d) * np.array([
+            [self.d * np.cos(theta), self.d * np.sin(theta)],
+            [-np.sin(theta),         np.cos(theta)]
+        ])
+
+        pd, pddot = curva(t_ref, self.a, self.omega)
+        p = np.array([x, y])
+
+        error = pd - p
+
+        uv = pddot + self.k * error
+
+        u = Ainv @ uv
+
+        v = float(u[0])
+        w = float(u[1])
+
+        v = float(np.clip(v, -self.max_v, self.max_v))
+        w = float(np.clip(w, -self.max_w, self.max_w))
+
+        return v, w, pd, error
+
     def control_loop(self):
         self.att_time()
 
@@ -242,74 +454,69 @@ class TwoRobotsCurveNode(Node):
 
         # =====================================================
         # Controle do robô 1
+        #
+        # tb1 segue curva(t)
+        # Como tb1 nasce em curva(0) = (0, 0), ele define o
+        # frame global da curva.
         # =====================================================
-        theta = self.theta1
-
-        Ainv = (1.0 / self.d) * np.array([
-            [self.d * np.cos(theta), self.d * np.sin(theta)],
-            [-np.sin(theta),         np.cos(theta)]
-        ])
-
-        pd1, pddot1 = curva(self.t, self.a, self.omega)
-        p1 = np.array([self.x1, self.y1])
-
-        error1 = pd1 - p1
-        uv1 = pddot1 + 2.0 * error1
-
-        u1 = Ainv @ uv1
-
-        v1 = u1[0]
-        w1 = u1[1]
-
-        v1 = np.clip(v1, -self.max_v, self.max_v)
-        w1 = np.clip(w1, -self.max_w, self.max_w)
+        v1, w1, pd1, error1 = self.calcular_controle(
+            self.x1,
+            self.y1,
+            self.theta1,
+            self.t
+        )
 
         self.publish_cmd_tb1(v1, w1)
         self.publish_tracking_point_tb1(pd1)
 
-        self.error_pub_tb1.publish(Float64(data=float(np.linalg.norm(error1))))
+        self.error_pub_tb1.publish(
+            Float64(data=float(np.linalg.norm(error1)))
+        )
+
         self.v_pub_tb1.publish(Float64(data=float(v1)))
         self.w_pub_tb1.publish(Float64(data=float(w1)))
 
         # =====================================================
         # Controle do robô 2
-        # Mesmo ponto da curva, mas atrasado 2 segundos
+        #
+        # tb2 segue a mesma curva, mas atrasado no tempo.
+        # Aqui NÃO fazemos clamp para zero.
+        #
+        # No instante inicial:
+        #   t = 0
+        #   t2 = -delay_tb2
+        #
+        # Então o alvo inicial do tb2 é curva(-delay_tb2),
+        # que é exatamente onde ele deve nascer.
         # =====================================================
-        theta = self.theta2
-
-        Ainv = (1.0 / self.d) * np.array([
-            [self.d * np.cos(theta), self.d * np.sin(theta)],
-            [-np.sin(theta),         np.cos(theta)]
-        ])
-
         t2 = self.t - self.delay_tb2
-        if t2 < 0.0:
-            t2 = 0.0
 
-        pd2, pddot2 = curva(t2, self.a, self.omega)
-        p2 = np.array([self.x2, self.y2])
-
-        error2 = pd2 - p2
-        uv2 = pddot2 + 2.0 * error2
-
-        u2 = Ainv @ uv2
-
-        v2 = u2[0]
-        w2 = u2[1]
-
-        v2 = np.clip(v2, -self.max_v, self.max_v)
-        w2 = np.clip(w2, -self.max_w, self.max_w)
+        v2, w2, pd2, error2 = self.calcular_controle(
+            self.x2,
+            self.y2,
+            self.theta2,
+            t2
+        )
 
         self.publish_cmd_tb2(v2, w2)
         self.publish_tracking_point_tb2(pd2)
 
-        self.error_pub_tb2.publish(Float64(data=float(np.linalg.norm(error2))))
+        self.error_pub_tb2.publish(
+            Float64(data=float(np.linalg.norm(error2)))
+        )
+
         self.v_pub_tb2.publish(Float64(data=float(v2)))
         self.w_pub_tb2.publish(Float64(data=float(w2)))
 
         self.get_logger().info(
-            f"tb1: v={v1:.2f}, w={w1:.2f}, erro={np.linalg.norm(error1):.2f} | "
-            f"tb2: v={v2:.2f}, w={w2:.2f}, erro={np.linalg.norm(error2):.2f}",
+            f"tb1: "
+            f"pos_global=({self.x1:.2f}, {self.y1:.2f}), "
+            f"v={v1:.2f}, w={w1:.2f}, "
+            f"erro={np.linalg.norm(error1):.2f} | "
+            f"tb2: "
+            f"pos_global=({self.x2:.2f}, {self.y2:.2f}), "
+            f"v={v2:.2f}, w={w2:.2f}, "
+            f"erro={np.linalg.norm(error2):.2f}",
             throttle_duration_sec=1.0
         )
 
