@@ -11,7 +11,7 @@ from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import PointStamped
 from std_msgs.msg import Float64
 from rclpy.executors import ExternalShutdownException
-
+from geometry_msgs.msg import Vector3Stamped
 
 def quaternion_to_yaw(q):
     siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
@@ -115,7 +115,23 @@ class TwoRobotsCurveNode(Node):
             '/tb2/controle/w',
             10
         )
+        
+        self.avoidance_tb1 = np.array([0.0, 0.0])
+        self.avoidance_tb2 = np.array([0.0, 0.0])
 
+        self.avoidance_sub_tb1 = self.create_subscription(
+            Vector3Stamped,
+            '/tb1/avoidance/qdot',
+            self.avoidance_callback_tb1,
+            10
+        )
+
+        self.avoidance_sub_tb2 = self.create_subscription(
+            Vector3Stamped,
+            '/tb2/avoidance/qdot',
+            self.avoidance_callback_tb2,
+            10
+        )
         # =====================================================
         # Tempo
         # =====================================================
@@ -245,6 +261,23 @@ class TwoRobotsCurveNode(Node):
             f'max_v={self.max_v:.2f}, '
             f'max_w={self.max_w:.2f}'
         )
+
+
+
+
+    def avoidance_callback_tb1(self, msg):
+        self.avoidance_tb1 = np.array([
+            msg.vector.x,
+            msg.vector.y
+        ])
+
+
+    def avoidance_callback_tb2(self, msg):
+        self.avoidance_tb2 = np.array([
+            msg.vector.x,
+            msg.vector.y
+        ])
+
 
     def att_time(self):
         self.t = (self.get_clock().now() - self.start_time).nanoseconds * 1e-9
@@ -423,7 +456,7 @@ class TwoRobotsCurveNode(Node):
         self.publish_cmd_tb2(0.0, 0.0)
         self.get_logger().info('Robôs parados.')
 
-    def calcular_controle(self, x, y, theta, t_ref):
+    def calcular_controle(self, x, y, theta, t_ref, qdot_avoid):
         Ainv = (1.0 / self.d) * np.array([
             [self.d * np.cos(theta), self.d * np.sin(theta)],
             [-np.sin(theta),         np.cos(theta)]
@@ -434,7 +467,7 @@ class TwoRobotsCurveNode(Node):
 
         error = pd - p
 
-        uv = pddot + self.k * error
+        uv = pddot + self.k * error + qdot_avoid
 
         u = Ainv @ uv
 
@@ -463,7 +496,8 @@ class TwoRobotsCurveNode(Node):
             self.x1,
             self.y1,
             self.theta1,
-            self.t
+            self.t,
+            self.avoidance_tb1
         )
 
         self.publish_cmd_tb1(v1, w1)
@@ -491,11 +525,13 @@ class TwoRobotsCurveNode(Node):
         # =====================================================
         t2 = self.t - self.delay_tb2
 
+
         v2, w2, pd2, error2 = self.calcular_controle(
             self.x2,
             self.y2,
             self.theta2,
-            t2
+            t2,
+            self.avoidance_tb2
         )
 
         self.publish_cmd_tb2(v2, w2)

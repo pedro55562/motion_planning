@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
         'two_robots_curve = mp_two_robot_curve.two_robots_curve_node:main',
+        'multi_robot_avoidance_node = mp_two_robot_curve.multi_robot_avoidance_node:main',
         ],
     },
 )
