@@ -1,0 +1,34 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <model name="map_obstacles">
+    <static>true</static>
+
+    <link name="link">
+
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://map_obstacles/meshes/obstacles.stl</uri>
+          </mesh>
+        </geometry>
+
+        <material>
+          <ambient>0.05 0.05 0.05 1.0</ambient>
+          <diffuse>0.12 0.12 0.12 1.0</diffuse>
+          <specular>0.01 0.01 0.01 1.0</specular>
+        </material>
+
+        <cast_shadows>false</cast_shadows>
+      </visual>
+
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://map_obstacles/meshes/obstacles.stl</uri>
+          </mesh>
+        </geometry>
+      </collision>
+
+    </link>
+  </model>
+</sdf>
